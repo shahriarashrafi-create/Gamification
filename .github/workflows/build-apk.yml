@@ -39,7 +39,10 @@ jobs:
 
       - name: Sync Android
         working-directory: project
-        run: npx cap sync android
+        run: |
+          rm -f capacitor.config.ts
+          printf '{"appId":"com.shahriar.game","appName":"Shahriar Game","webDir":"dist"}' > capacitor.config.json
+          npx cap sync android
 
       - name: Make Gradle executable
         working-directory: project
