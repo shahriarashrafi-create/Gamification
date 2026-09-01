@@ -55,6 +55,7 @@ jobs:
           sed -i 's/RepositoriesMode.FAIL_ON_PROJECT_REPOS/RepositoriesMode.PREFER_PROJECT/' settings.gradle
           printf "\ninclude ':capacitor-android'\nproject(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')\n" >> settings.gradle
           ./gradlew assembleDebug --stacktrace
+          sed -i "/dependencies {/a\\    implementation 'androidx.appcompat:appcompat:1.7.0'" app/build.gradle
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
