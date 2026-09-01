@@ -31,7 +31,7 @@ jobs:
 
       - name: Install
         working-directory: project
-        run: npm install
+        run: npm install && npm install -D typescript
 
       - name: Build web
         working-directory: project
