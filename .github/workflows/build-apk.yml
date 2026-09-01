@@ -33,7 +33,7 @@ jobs:
         working-directory: project
         run: npm install
 
-      -       - name: Build web
+       - name: Build web
         working-directory: project
         run: |
           sed -i "s/target: 'es2020'/target: 'esnext'/" vite.config.js
