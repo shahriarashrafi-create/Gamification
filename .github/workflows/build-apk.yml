@@ -50,7 +50,7 @@ jobs:
 
       - name: Build APK
         working-directory: project/android
-        run: ./gradlew assembleDebug --stacktrace
+        run: printf "\ninclude ':capacitor-android'\nproject(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')\n" >> settings.gradle && ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
