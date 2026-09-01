@@ -31,7 +31,7 @@ jobs:
 
       - name: Install
         working-directory: project
-        run: npm ci
+        run: npm install
 
       - name: Build web
         working-directory: project
