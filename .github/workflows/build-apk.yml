@@ -1,65 +1,84 @@
-name: Build APK from Project ZIP
+name: Build APK from uploaded ZIP
 
 on:
+  push:
+    paths:
+      - "**.zip"
+      - ".github/workflows/build-apk-from-zip.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 45
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project
-        run: unzip -q project.zip -d project
+      - name: Select newest ZIP
+        id: zip
+        shell: bash
+        run: |
+          ZIP_FILE="$(find . -type f -iname '*.zip' -not -path './.git/*' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No ZIP file found."
+            exit 1
+          fi
+          echo "file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Extract ZIP safely
+        shell: bash
+        run: |
+          mkdir -p extracted
+          unzip -q "${{ steps.zip.outputs.file }}" -d extracted
+          find extracted -type d -name __MACOSX -prune -exec rm -rf {} +
 
-      - name: Setup Java
+      - name: Find Android project
+        id: project
+        shell: bash
+        run: |
+          PROJECT_DIR="$(find extracted -type f \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts \) -printf '%h\n' | sort | head -1)"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Android/Gradle project was not found inside the ZIP."
+            exit 1
+          fi
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "17"
+          cache: gradle
 
-      - name: Verify
-        working-directory: project
-        run: node scripts/verify-final-release.mjs
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Install
-        working-directory: project
-        run: npm install && npm install -D typescript
-
-      - name: Build web
-        working-directory: project
-        run: npm run build -- --target esnext
-
-      - name: Sync Android
-        working-directory: project
+      - name: Build debug APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
         run: |
-          rm -f capacitor.config.ts
-          printf '{"appId":"com.shahriar.game","appName":"Shahriar Game","webDir":"dist"}' > capacitor.config.json
-          npx cap sync android
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew --no-daemon clean assembleDebug
+          else
+            gradle --no-daemon clean assembleDebug
+          fi
 
-      - name: Make Gradle executable
-        working-directory: project
-        run: chmod +x android/gradlew
-
-      - name: Build APK
-        working-directory: project/android
+      - name: Collect APK
+        shell: bash
         run: |
-          sed -i 's/RepositoriesMode.FAIL_ON_PROJECT_REPOS/RepositoriesMode.PREFER_PROJECT/' settings.gradle
-          printf "\ninclude ':capacitor-android'\nproject(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')\n" >> settings.gradle
-          printf "\ndependencies {\n    implementation 'androidx.appcompat:appcompat:1.7.0'\n}\n" >> app/build.gradle
-          ./gradlew assembleDebug --stacktrace
-          
+          mkdir -p apk-output
+          find "${{ steps.project.outputs.dir }}" -type f -name '*-debug.apk' -exec cp {} apk-output/ \;
+          test -n "$(find apk-output -type f -name '*.apk' -print -quit)" || exit 1
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: shahriar-game-apk
-          path: project/android/app/build/outputs/apk/debug/app-debug.apk
+          name: generated-debug-apk
+          path: apk-output/*.apk
           if-no-files-found: error
+          retention-days: 30
